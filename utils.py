@@ -30,11 +30,11 @@ def list_model_paths(model_folder, allowed_names=None):
 
 
 def create_sift():
-    return cv2.SIFT_create(nfeatures=0, contrastThreshold=0.01, edgeThreshold=15)
+    return cv2.SIFT_create(nfeatures=0, contrastThreshold=0.005, edgeThreshold=30)
 
 
 def create_flann():
-    return cv2.FlannBasedMatcher(dict(algorithm=1, trees=5), dict(checks=50))
+    return cv2.FlannBasedMatcher(dict(algorithm=1, trees=5), dict(checks=100))
 
 
 def compute_ghtt_votes(kp_model, kp_scene, matches, model_center):
@@ -113,9 +113,9 @@ def is_geometrically_valid(dst_pts, scene_h, scene_w):
 
     pts = dst_pts.reshape(4, 2)
     dists = [np.linalg.norm(pts[i] - pts[(i + 1) % 4]) for i in range(4)]
-    if max(dists[0], dists[2]) / min(dists[0], dists[2]) > 1.25:
+    if max(dists[0], dists[2]) / min(dists[0], dists[2]) > 1.2:
         return False
-    if max(dists[1], dists[3]) / min(dists[1], dists[3]) > 1.25:
+    if max(dists[1], dists[3]) / min(dists[1], dists[3]) > 1.2:
         return False
 
     return True
@@ -152,12 +152,12 @@ def nms_boxes_robust(candidates, scene_shape):
 
 
 def detect_products_in_scene(scene_path, model_paths, sift, flann, verbose=False):
-    scene_gray = cv2.imread(scene_path, 0)
     scene_rgb = cv2.imread(scene_path)
+    scene_rgb = cv2.resize(scene_rgb, (0, 0), fx=3.0, fy=3.0, interpolation=cv2.INTER_LANCZOS4)
+    scene_gray = cv2.cvtColor(scene_rgb, cv2.COLOR_BGR2GRAY)
     if scene_gray is None or scene_rgb is None:
         return None, []
 
-    scene_gray = cv2.bilateralFilter(scene_gray, d=9, sigmaColor=75, sigmaSpace=75)
     scene_h, scene_w = scene_gray.shape
 
     kp_scene, des_scene = sift.detectAndCompute(scene_gray, None)
@@ -169,7 +169,6 @@ def detect_products_in_scene(scene_path, model_paths, sift, flann, verbose=False
         if model_bgr is None:
             continue
         model_gray = cv2.cvtColor(model_bgr, cv2.COLOR_BGR2GRAY)
-        model_gray = cv2.bilateralFilter(model_gray, d=9, sigmaColor=75, sigmaSpace=75)
         h_m, w_m = model_gray.shape
         model_center = (w_m / 2, h_m / 2)
 
@@ -178,19 +177,19 @@ def detect_products_in_scene(scene_path, model_paths, sift, flann, verbose=False
             continue
         matches = flann.knnMatch(des_model, des_scene, k=2)
 
-        good = [m for m, n in matches if m.distance < 0.75 * n.distance]
+        good = [m for m, n in matches if m.distance < 0.85 * n.distance]
         if len(good) < 5:
             continue
 
         votes, m_list = compute_ghtt_votes(kp_model, kp_scene, good, model_center)
-        clusters = cluster_votes_greedy(votes, m_list, distance_thresh=40, min_votes=5)
+        clusters = cluster_votes_greedy(votes, m_list, distance_thresh=40, min_votes=4)
 
         for idxs in clusters:
             c_matches = [m_list[i] for i in idxs]
             src = np.float32([kp_model[m.queryIdx].pt for m in c_matches]).reshape(-1, 1, 2)
             dst_pts = np.float32([kp_scene[m.trainIdx].pt for m in c_matches]).reshape(-1, 1, 2)
 
-            M, mask = cv2.findHomography(src, dst_pts, cv2.RANSAC, 5.0)
+            M, mask = cv2.findHomography(src, dst_pts, cv2.RANSAC, 10.0)
             if M is None:
                 continue
 
