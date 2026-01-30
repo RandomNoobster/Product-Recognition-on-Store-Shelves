@@ -20,7 +20,8 @@ def solve_step_c():
     ensure_dir(OUTPUT_FOLDER)
     
     scene_paths = list_scene_paths(SCENE_FOLDER, "h*.jpg")
-    allowed_models = [f"{i}.jpg" for i in range(24)]
+    # allowed_models = [f"{i}.jpg" for i in range(24)]
+    allowed_models = None
     model_paths = list_model_paths(MODEL_FOLDER, allowed_models)
 
     sift = create_sift()
