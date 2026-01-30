@@ -20,7 +20,15 @@ def solve_step_a():
     ensure_dir(OUTPUT_FOLDER)
 
     scene_paths = list_scene_paths(SCENE_FOLDER, "e*.png")
-    allowed_models = ["0.jpg", "1.jpg", "11.jpg", "19.jpg", "24.jpg", "26.jpg", "25.jpg"]
+    allowed_models = [
+        "nesquik_cioccomilk.jpg",
+        "choco_krave_cioccolato.jpg",
+        "choco_krave_nocciole.jpg",
+        "country_crisp_nuts.jpg",
+        "fitness.jpg",
+        "nesquik_duo_cioccolatio_bianco.jpg",
+        "coco_pops_palline.jpg",
+    ]
     model_paths = list_model_paths(MODEL_FOLDER, allowed_models)
 
     sift = create_sift()
