@@ -146,9 +146,12 @@ def is_geometrically_valid(dst_pts, scene_h, scene_w):
 
     pts = dst_pts.reshape(4, 2)
     dists = [np.linalg.norm(pts[i] - pts[(i + 1) % 4]) for i in range(4)]
-    # Ensure opposite sides have similar lengths to filter out extreme skewing.
+    # Ensure opposite sides / diagonals have similar lengths to filter out extreme skewing.
     if max(dists[0], dists[2]) / min(dists[0], dists[2]) > 1.2: return False
     if max(dists[1], dists[3]) / min(dists[1], dists[3]) > 1.2: return False
+
+    diagonals = [np.linalg.norm(pts[i] - pts[i + 2]) for i in range(2)]
+    if max(diagonals[0], diagonals[1]) / min(diagonals[0], diagonals[1]) > 1.5: return False
 
     return True
 
