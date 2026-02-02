@@ -41,7 +41,7 @@ def create_flann():
     return cv2.FlannBasedMatcher(dict(algorithm=1, trees=5), dict(checks=100))
 
 
-def compute_ghtt_votes(kp_model, kp_scene, matches, model_center):
+def compute_ght_votes(kp_model, kp_scene, matches, model_center):
     """
     Star Model Voting (GHT) using Local Invariant Features.
     Instead of a 4D accumulator array (x, y, scale, rotation), we use the scale and orientation properties of SIFT keypoints to vote for a single object center in the 2D scene space.
@@ -104,7 +104,9 @@ def cluster_votes_greedy(votes, distance_thresh=30, min_votes=5):
 def get_color_similarity(model_bgr, scene_bgr, dst_pts):
     """
     HSV histogram correlation to distinguish variants and confirm detections.
-    We use HSV (Hue, Saturation, Value) because it decouples chromaticity from intensity, providing better photometric invariance than RGB.
+    We use HSV (Hue, Saturation, Value) because it makes it easier to compare
+    colors than RGB, for example by decoupling colour intensity from the rest of the
+    color information
     """
     try:
         # Extract the detected patch from the scene using the inverse homography.
@@ -131,7 +133,8 @@ def get_color_similarity(model_bgr, scene_bgr, dst_pts):
         similarity = cv2.compareHist(hist_model, hist_scene, cv2.HISTCMP_CORREL)
         return max(0.0, similarity)
     except Exception:
-        # We catch exceptions to handle cases where perspective transformation might fail due to degenerate bounding boxes.
+        # We catch exceptions to handle cases where perspective transformation 
+        # might fail due to degenerate bounding boxes.
         return 0.0
 
 
@@ -147,11 +150,14 @@ def is_geometrically_valid(dst_pts, scene_h, scene_w):
     pts = dst_pts.reshape(4, 2)
     dists = [np.linalg.norm(pts[i] - pts[(i + 1) % 4]) for i in range(4)]
     # Ensure opposite sides / diagonals have similar lengths to filter out extreme skewing.
-    if max(dists[0], dists[2]) / min(dists[0], dists[2]) > 1.2: return False
-    if max(dists[1], dists[3]) / min(dists[1], dists[3]) > 1.2: return False
+    if max(dists[0], dists[2]) / min(dists[0], dists[2]) > 1.2: 
+        return False
+    if max(dists[1], dists[3]) / min(dists[1], dists[3]) > 1.2: 
+        return False
 
     diagonals = [np.linalg.norm(pts[i] - pts[i + 2]) for i in range(2)]
-    if max(diagonals[0], diagonals[1]) / min(diagonals[0], diagonals[1]) > 1.5: return False
+    if max(diagonals[0], diagonals[1]) / min(diagonals[0], diagonals[1]) > 1.5: 
+        return False
 
     return True
 
@@ -160,9 +166,12 @@ def nms_boxes_robust(candidates, scene_shape):
     """
     Global Non-Maximum Suppression (NMS).
     NMS is used to prune overlapping candidate matches.
-    We use both Euclidean distance between centers and IoU (Intersection over Union) to ensure we don't detect the same object instance twice under different models.
+    We use both Euclidean distance between centers and IoU (Intersection over Union) 
+    to ensure we don't detect the same object instance twice under different models.
     """
-    if not candidates: return []
+    if not candidates: 
+        return []
+    
     # Sort candidates by our 'final_score' so we keep the most confident detection first.
     candidates.sort(key=lambda x: x['final_score'], reverse=True)
 
@@ -183,7 +192,7 @@ def nms_boxes_robust(candidates, scene_shape):
             cv2.fillPoly(mask2, [np.int32(other['dst'])], 1)
             inter = np.sum(np.logical_and(mask1, mask2))
             union = np.sum(np.logical_or(mask1, mask2))
-            if inter / union > 0.1: # If overlap is >10%, reject the weaker candidate.
+            if inter / union > 0.2: # If overlap is >20%, reject the weaker candidate.
                 continue
 
             remaining.append(other)
@@ -193,9 +202,12 @@ def nms_boxes_robust(candidates, scene_shape):
 
 def detect_products_in_scene(scene_path, model_paths, sift, flann, verbose=False):
     scene_rgb = cv2.imread(scene_path)
-    # Upscaling the scene image allows SIFT to detect keypoints at smaller scales, essentially increasing our receptive field.
-    # We use Lanczos4 instead of bilinear or bicubic interpolation for higher quality upscaling with less aliasing.
-    # We tried changing the sigma value in SIFT to detect smaller features, but it led to more noise and worse results than simply upscaling the image.
+    # Upscaling the scene image allows SIFT to detect keypoints at smaller 
+    # scales, essentially increasing our receptive field.
+    # We use Lanczos4 instead of bilinear or bicubic interpolation 
+    # for higher quality upscaling with less aliasing.
+    # We tried changing the sigma value in SIFT to detect smaller features, 
+    # but it led to more noise and worse results than simply upscaling the image.
     scene_rgb = cv2.resize(scene_rgb, (0, 0), fx=3.0, fy=3.0, interpolation=cv2.INTER_LANCZOS4)
     scene_gray = cv2.cvtColor(scene_rgb, cv2.COLOR_BGR2GRAY)
     if scene_gray is None or scene_rgb is None: return None, []
@@ -217,12 +229,15 @@ def detect_products_in_scene(scene_path, model_paths, sift, flann, verbose=False
         
         matches = flann.knnMatch(des_model, des_scene, k=2)
 
-        # This is the Lowe's ratio test to filter out ambiguous matches. We increase this from the classic 0.75 to 0.85 in order to retain more matches, as our subsequent steps (GHT voting and RANSAC) are robust enough to handle the additional outliers.
+        # This is the Lowe's ratio test to filter out ambiguous matches. 
+        # We increase this from the classic 0.75 to 0.85 in order to retain more matches, as our 
+        # subsequent steps (GHT voting and RANSAC) are robust enough to handle the additional outliers.
         good = [m for m, n in matches if m.distance < 0.85 * n.distance]
         if len(good) < 5: continue
 
-        votes, m_list = compute_ghtt_votes(kp_model, kp_scene, good, model_center)
-        # We require at least 4 votes (min_votes=4) because 4 correspondences are the mathematical minimum to compute a Homography.
+        votes, m_list = compute_ght_votes(kp_model, kp_scene, good, model_center)
+        # We require at least 4 votes (min_votes=4) because 4 correspondences are 
+        # the mathematical minimum to compute a Homography.
         clusters = cluster_votes_greedy(votes, distance_thresh=40, min_votes=4)
 
         for idxs in clusters:
@@ -230,7 +245,8 @@ def detect_products_in_scene(scene_path, model_paths, sift, flann, verbose=False
             src = np.float32([kp_model[m.queryIdx].pt for m in c_matches]).reshape(-1, 1, 2)
             dst_pts = np.float32([kp_scene[m.trainIdx].pt for m in c_matches]).reshape(-1, 1, 2)
 
-            # We use a threshold of 10.0 for RANSAC. While Lab 5 used 5.0, a larger threshold is more robust to the localization errors common in complex scenes.
+            # We use a threshold of 10.0 for RANSAC. While Lab 5 used 5.0, a larger threshold 
+            # is more robust to the localization errors common in complex scenes.
             M, mask = cv2.findHomography(src, dst_pts, cv2.RANSAC, 10.0)
             if M is None: continue
 
