@@ -52,15 +52,15 @@ def compute_ghtt_votes(kp_model, kp_scene, matches, model_center):
         k_m = kp_model[m.queryIdx]
         k_s = kp_scene[m.trainIdx]
         
-        # 1. Compute relative scale and rotation between model and scene keypoints.
+        # Compute relative scale and rotation between model and scene keypoints.
         scale = k_s.size / k_m.size
         theta = np.deg2rad(k_s.angle - k_m.angle)
         
-        # 2. Define the vector from the model keypoint to the model center.
+        # Define the vector from the model keypoint to the model center.
         v_x = model_center[0] - k_m.pt[0]
         v_y = model_center[1] - k_m.pt[1]
         
-        # 3. Rotate and scale this vector to 'guess' the center position in the scene.
+        # Rotate and scale this vector to 'guess' the center position in the scene.
         rot_v_x = (v_x * np.cos(theta) - v_y * np.sin(theta)) * scale
         rot_v_y = (v_x * np.sin(theta) + v_y * np.cos(theta)) * scale
         
@@ -72,7 +72,7 @@ def compute_ghtt_votes(kp_model, kp_scene, matches, model_center):
     return np.array(votes), vote_matches
 
 
-def cluster_votes_greedy(votes, match_list, distance_thresh=30, min_votes=5):
+def cluster_votes_greedy(votes, distance_thresh=30, min_votes=5):
     """
     Greedy clustering to group votes for potential object centers.
     Since GHT turns a global detection problem into a local one, 
@@ -172,11 +172,11 @@ def nms_boxes_robust(candidates, scene_shape):
         keep.append(best)
         remaining = []
         for other in candidates:
-            # 1. Distance check: if centers are extremely close, they are likely duplicates.
+            # Distance check: if centers are extremely close, they are likely duplicates.
             dist = np.linalg.norm(np.array(best['pos']) - np.array(other['pos']))
             if dist < 60: continue
 
-            # 2. IoU check: calculate the area overlap between the two projected boxes.
+            # IoU check: calculate the area overlap between the two projected boxes.
             mask1 = np.zeros(scene_shape, dtype=np.uint8)
             mask2 = np.zeros(scene_shape, dtype=np.uint8)
             cv2.fillPoly(mask1, [np.int32(best['dst'])], 1)
@@ -223,7 +223,7 @@ def detect_products_in_scene(scene_path, model_paths, sift, flann, verbose=False
 
         votes, m_list = compute_ghtt_votes(kp_model, kp_scene, good, model_center)
         # We require at least 4 votes (min_votes=4) because 4 correspondences are the mathematical minimum to compute a Homography.
-        clusters = cluster_votes_greedy(votes, m_list, distance_thresh=40, min_votes=4)
+        clusters = cluster_votes_greedy(votes, distance_thresh=40, min_votes=4)
 
         for idxs in clusters:
             c_matches = [m_list[i] for i in idxs]
